@@ -1,6 +1,7 @@
 package nachos.threads;
-
 import nachos.machine.*;
+import java.util.Enumeration;
+import java.util.Hashtable;
 
 /**
  * Uses the hardware timer to provide preemption, and to allow threads to sleep
@@ -27,7 +28,25 @@ public class Alarm {
      * that should be run.
      */
     public void timerInterrupt() {
-	KThread.currentThread().yield();
+        Machine.interrupt().disable();	
+
+        //inspect the list
+    	if(!list.isEmpty()){
+    		Enumeration wakeTimes = list.keys();
+    		Enumeration threadsToWake = list.elements();
+
+    		while(threadsToWake.hasMoreElements()){
+    			Long wakeUpTime = (Long)wakeTimes.nextElement();
+    			KThread thread = (KThread)threadsToWake.nextElement();
+
+                //any thread that has wakeUpTime < currentTime, you need to wake up
+    			if(wakeUpTime < Machine.timer().getTime()){
+    				thread.ready();
+    				list.remove(wakeUpTime);
+    			}
+    		}
+    		Machine.interrupt().enable();
+    	}
     }
 
     /**
@@ -44,10 +63,22 @@ public class Alarm {
      *
      * @see	nachos.machine.Timer#getTime()
      */
-    public void waitUntil(long x) {
-	// for now, cheat just to get something working (busy waiting is bad)
-	long wakeTime = Machine.timer().getTime() + x;
-	while (wakeTime > Machine.timer().getTime())
-	    KThread.yield();
+    public void waitUntil(long x) { 
+    boolean status = Machine.interrupt().disable();	
+
+    //The wakeup time should be the current time plus the time the threads need to sleep
+	long wakeUpTime = Machine.timer().getTime() + x;
+
+    //save wakeUpTime
+    KThread threadPointer = KThread.currentThread();
+	list.put(wakeUpTime, threadPointer);
+
+    //put the thread to sleep
+	threadPointer.sleep();
+    
+	Machine.interrupt().restore(status);
     }
+    
+    //list that saves at least a tuple <wakeUpTime, threadPointer>
+    Hashtable<Long,KThread> list = new Hashtable<Long,KThread>();
 }

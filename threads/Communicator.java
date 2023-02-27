@@ -1,5 +1,4 @@
 package nachos.threads;
-
 import nachos.machine.*;
 
 /**
@@ -13,6 +12,14 @@ public class Communicator {
     /**
      * Allocate a new communicator.
      */
+	private Lock communicatorLock = new Lock();
+	private Condition speaker = new Condition(communicatorLock);
+	private Condition listener = new Condition(communicatorLock);
+	private Condition listenerStatus = new Condition(communicatorLock);
+	private int mail = 0; 
+	private int numOfListeners = 0; 
+	private boolean mailStatus = false;
+	
     public Communicator() {
     }
 
@@ -26,7 +33,30 @@ public class Communicator {
      *
      * @param	word	the integer to transfer.
      */
+    
+    
     public void speak(int word) {
+    	communicatorLock.acquire();
+    	
+		//speaker sleeps until listener is ready
+    	while(mailStatus){
+    		speaker.sleep(); 
+    	}
+    	
+    	mailStatus = true; 
+    	mail = word;
+
+    	//if there are no sleepers then make the listenerStatus sleep
+    	while(numOfListeners == 0 ) {
+    		listenerStatus.sleep(); 
+    	}
+
+    	listener.wake(); 
+    	listenerStatus.sleep(); 
+
+    	mailStatus= false;
+    	speaker.wake();
+    	communicatorLock.release();
     }
 
     /**
@@ -36,6 +66,23 @@ public class Communicator {
      * @return	the integer transferred.
      */    
     public int listen() {
-	return 0;
+    	communicatorLock.acquire();
+
+		//add listener
+    	numOfListeners++; 
+
+    	if(numOfListeners >=1 && mailStatus) {
+    		listenerStatus.wake();
+    	}
+
+    	listener.sleep(); 
+    	listenerStatus.wake(); 
+
+		//you've got mail
+    	int recieved = mail;
+    	communicatorLock.release();
+    	return recieved;
+
     }
+    
 }

@@ -1,6 +1,7 @@
 package nachos.threads;
-
 import nachos.machine.*;
+import java.util.LinkedList;
+
 
 /**
  * An implementation of condition variables that disables interrupt()s for
@@ -31,11 +32,19 @@ public class Condition2 {
      * automatically reacquire the lock before <tt>sleep()</tt> returns.
      */
     public void sleep() {
-	Lib.assertTrue(conditionLock.isHeldByCurrentThread());
+        //interrupt thread
+        boolean status = Machine.interrupt().disable();
+        
+        conditionLock.release();
 
-	conditionLock.release();
+        //add thread to sleep queue
+        sleepQueue.addFirst(KThread.currentThread());
+        KThread.sleep();
 
-	conditionLock.acquire();
+        conditionLock.acquire();
+        
+        //restore interrupted thread
+        Machine.interrupt().restore(status);	
     }
 
     /**
@@ -43,7 +52,15 @@ public class Condition2 {
      * current thread must hold the associated lock.
      */
     public void wake() {
-	Lib.assertTrue(conditionLock.isHeldByCurrentThread());
+        //interrupt thread
+        boolean status = Machine.interrupt().disable();
+        
+        //wake thread if there are threads in the sleepQueue
+        if(sleepQueue.size() >= 1){
+            sleepQueue.removeLast().ready();	
+        }
+
+        Machine.interrupt().restore(status);
     }
 
     /**
@@ -51,8 +68,12 @@ public class Condition2 {
      * thread must hold the associated lock.
      */
     public void wakeAll() {
-	Lib.assertTrue(conditionLock.isHeldByCurrentThread());
+        while(sleepQueue.size() >= 1){
+            wake();
+        }
     }
 
-    private Lock conditionLock;
+    Lock conditionLock;
+    //threads sleeping on condition
+    LinkedList<KThread> sleepQueue = new LinkedList<KThread>();
 }
