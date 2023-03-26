@@ -19,6 +19,7 @@ Outline:
 
 
 Instructions from class:
+
 Task 1 - Synchronization
 Now that you have all the synchronization devices implemented by project 1 and the original
 Nachos, use them to complete boat.java. You will find condition variables to be the most useful
