@@ -278,30 +278,17 @@ public class KThread {
      * call is not guaranteed to return. This thread must not be the current
      * thread.
      */
-    
-//     public void join() {
-//         Implement KThread.join(). This is a synchronization method. A KThread X calling
-// join() on a KThread Y (e.g., Y.join()), must wait for KThread Y to finish execution
-// before continuing. Note that another thread does not have to call join(), but if it is
-// called, it must be called only once. The result of calling join() a second time on the
-// same thread is undefined. A thread must finish executing normally whether or not it
-// is joined.
     public void join() {
 	Lib.debug(dbgThread, "Joining to thread: " + toString());
 
 	Lib.assertTrue(this != currentThread);
 
-    // When the B.join() method is called (by the current thread A), B is NOT the current
-    // thread and yet we are executing B's join method. At this point B's join method should do
-    // two things: (i) save a reference (local to B) to the thread calling B.join() (that is, the
-    // current thread) and (ii) put the current thread to sleep (A should go to sleep if it calls
-    // B.join()). Eventually, A will have to be waken up by B (that is why we need to save a
-    // reference to the current thread). Note: I would recommend you store a reference to the
-    // current thread in a variable of type ThreadQueue [this will help you later on when doing
-    // the priority scheduler].
+    //save a reference (local to B) to the thread calling B.join() (that is, the current thread)
     boolean threadStatus = Machine.interrupt().disable();
     if(status != statusFinished){
 
+        //put the current thread to sleep (A should go to sleep if it calls B.join()). Eventually, 
+        //A will have to be waken up by B (that is why we need to save a reference to the current thread)
         joinQueue.waitForAccess(currentThread);
         sleep();
     }
@@ -309,13 +296,7 @@ public class KThread {
         return;
     }
 
-    // 4. We have only solved the problem of putting thread A to sleep. The second issue we
-    // need to resolve is when (and where) do we make A resume execution?. Obviously, we
-    // should wake A up once B is done. If you have read the source code you must have
-    // noticed that when a thread is finishing execution, it calls the finish() method, so the
-    // finish method is a good place to do this. Since we have saved a reference to A, this
-    // should not be a problem. Note: if the reference is null, that means that NO thread has
-    //called join on B.
+    //resume execution
     Machine.interrupt().restore(threadStatus);	
 
     }
