@@ -6,6 +6,9 @@ import java.util.TreeSet;
 import java.util.HashSet;
 import java.util.Iterator;
 
+//ADDED
+import java.util.LinkedList;
+
 /**
  * A scheduler that chooses threads based on their priorities.
  *
@@ -128,24 +131,48 @@ public class PriorityScheduler extends Scheduler {
     protected class PriorityQueue extends ThreadQueue {
 	PriorityQueue(boolean transferPriority) {
 	    this.transferPriority = transferPriority;
+		// //ADDED
+		threadsWaiting = new LinkedList<ThreadState>();
 	}
 
 	public void waitForAccess(KThread thread) {
 	    Lib.assertTrue(Machine.interrupt().disabled());
 	    getThreadState(thread).waitForAccess(this);
+		//ADDED
+		final ThreadState ts = getThreadState(thread);
+		this.threadsWaiting.add(ts);
+		ts.waitForAccess(this);
 	}
 
 	public void acquire(KThread thread) {
 	    Lib.assertTrue(Machine.interrupt().disabled());
 	    getThreadState(thread).acquire(this);
+		//ADDED
+		final ThreadState ts = getThreadState(thread);
+		if (resourceHolder != null) {
+			resourceHolder.release(this);
+		}
+		resourceHolder = ts;
+		ts.acquire(this);
 	}
 
+	//TODO:Implement nextThread
 	public KThread nextThread() {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-	    // implement me
-	    return null;
+	    // ADDED
+            final ThreadState nextThread = pickNextThread();
+
+            if (nextThread == null) { 
+            	return null;
+            }
+			else{
+            threadsWaiting.remove(nextThread);
+            acquire(nextThread.getThread());
+            return nextThread.getThread();
+			}
 	}
 
+	//TODO: Implement pickNextThread
 	/**
 	 * Return the next thread that <tt>nextThread()</tt> would return,
 	 * without modifying the state of this queue.
@@ -154,13 +181,58 @@ public class PriorityScheduler extends Scheduler {
 	 *		return.
 	 */
 	protected ThreadState pickNextThread() {
-	    // implement me
-	    return null;
+	    // ADDED
+		int nextPriority = priorityMinimum;
+		ThreadState next = null;
+		for (final ThreadState currThread : this.threadsWaiting) {
+			int currPriority = currThread.getEffectivePriority();
+			if (next == null || (currPriority > nextPriority)) {
+				next = currThread;
+				nextPriority = currPriority;
+			}
+		}
+		return next;
 	}
+
+	//ADDED
+	        /**
+         * This method returns the effectivePriority of this PriorityQueue.
+         * The return value is cached for as long as possible. If the cached value
+         * has been invalidated, this method will spawn a series of mutually
+         * recursive calls needed to recalculate effectivePriorities across the
+         * entire resource graph.
+         * @return
+         */
+        public int getEffectivePriority() {
+            if (!this.transferPriority) {
+                return priorityMinimum;
+            } else if (this.priorityChange) {
+                // Recalculate effective priorities
+                this.effectivePriority = priorityMinimum;
+                for (final ThreadState curr : this.threadsWaiting) {
+                    this.effectivePriority = Math.max(
+                    		this.effectivePriority, curr.getEffectivePriority()
+                    		);
+                }//end of for loop
+                this.priorityChange = false;
+            }//end of If-else statement 
+            return effectivePriority;
+        }//end of getEffectivePriority() 
 	
 	public void print() {
 	    Lib.assertTrue(Machine.interrupt().disabled());
 	    // implement me (if you want)
+	}
+
+	//ADDED
+	private void invalCachedPrio() {
+		if (!this.transferPriority) return;
+
+		this.priorityChange = true;
+
+		if (this.resourceHolder != null) {
+			resourceHolder.invalCachedPrio();
+		}
 	}
 
 	/**
@@ -168,7 +240,14 @@ public class PriorityScheduler extends Scheduler {
 	 * threads to the owning thread.
 	 */
 	public boolean transferPriority;
-    }
+
+	//ADDED
+	protected final LinkedList<ThreadState> threadsWaiting;
+	protected ThreadState resourceHolder = null;
+	protected int effectivePriority = priorityMinimum;
+	protected boolean priorityChange = false;
+	
+    }//END OF PRIORITY QUEUE
 
     /**
      * The scheduling state of a thread. This should include the thread's
@@ -186,6 +265,10 @@ public class PriorityScheduler extends Scheduler {
 	 */
 	public ThreadState(KThread thread) {
 	    this.thread = thread;
+		//ADDED
+		this.resourcesIHave = new LinkedList<PriorityQueue>();
+		this.resourcesIWant = new LinkedList<PriorityQueue>();
+
 	    
 	    setPriority(priorityDefault);
 	}
@@ -199,16 +282,30 @@ public class PriorityScheduler extends Scheduler {
 	    return priority;
 	}
 
+	//TODO: implement getEffectivePriority
 	/**
 	 * Return the effective priority of the associated thread.
 	 *
 	 * @return	the effective priority of the associated thread.
 	 */
 	public int getEffectivePriority() {
-	    // implement me
-	    return priority;
+	    // ADDED
+		if (this.resourcesIHave.isEmpty()) {//if the resource i got is empty
+			return this.getPriority();
+		} else if (this.priorityChange) {// if priority changedv 
+			this.effectivePriority = this.getPriority();
+			for (final PriorityQueue pq : this.resourcesIHave) {// for each resource i have, do this 
+				this.effectivePriority = Math.max(
+						this.effectivePriority, pq.getEffectivePriority()
+						);
+			}//end of for-each loop
+			this.priorityChange = false;
+		}//end of if-else statement 
+		return this.effectivePriority;
 	}
 
+
+	//TODO: implement setPriority
 	/**
 	 * Set the priority of the associated thread to the specified value.
 	 *
@@ -220,9 +317,13 @@ public class PriorityScheduler extends Scheduler {
 	    
 	    this.priority = priority;
 	    
-	    // implement me
+	    // ADDED
+		for (final PriorityQueue pq : resourcesIWant) {
+			pq.invalCachedPrio();
+		}		
 	}
 
+	//TODO: implement waitForAccess
 	/**
 	 * Called when <tt>waitForAccess(thread)</tt> (where <tt>thread</tt> is
 	 * the associated thread) is invoked on the specified priority queue.
@@ -236,9 +337,13 @@ public class PriorityScheduler extends Scheduler {
 	 * @see	nachos.threads.ThreadQueue#waitForAccess
 	 */
 	public void waitForAccess(PriorityQueue waitQueue) {
-	    // implement me
+	    // ADDED
+		this.resourcesIWant.add(waitQueue);
+		this.resourcesIHave.remove(waitQueue);
+		waitQueue.invalCachedPrio();
 	}
 
+	//TODO: implement acquire
 	/**
 	 * Called when the associated thread has acquired access to whatever is
 	 * guarded by <tt>waitQueue</tt>. This can occur either as a result of
@@ -250,8 +355,54 @@ public class PriorityScheduler extends Scheduler {
 	 * @see	nachos.threads.ThreadQueue#nextThread
 	 */
 	public void acquire(PriorityQueue waitQueue) {
-	    // implement me
+	    // ADDED
+		this.resourcesIHave.add(waitQueue);
+		this.resourcesIWant.remove(waitQueue);
+		this.invalCachedPrio();
 	}	
+
+	//ADDED
+	/**
+         * Called when the associated thread has relinquished access to whatever
+         * is guarded by waitQueue.
+          * @param waitQueue The waitQueue corresponding to the relinquished resource.
+         */
+        public void release(PriorityQueue waitQueue) {
+            this.resourcesIHave.remove(waitQueue);
+            this.invalCachedPrio();
+        }//end of release()
+
+        public KThread getThread() {
+            return thread;
+        }//end of getThread()
+
+        private void invalCachedPrio() {
+            if (this.priorityChange){ //if priority changed, return back 
+            	return; //leave function
+            }
+            this.priorityChange = true; // priority DID change, do this 
+            for (final PriorityQueue pq : this.resourcesIWant) { //for-each item, loop
+                pq.invalCachedPrio();
+            }//end of For loop
+        }//end of invalCachedPrio()
+
+        /**
+         * True if effective priority has been invalidated for this ThreadState.
+         */
+        protected boolean priorityChange = false;
+        /**
+         * Holds the effective priority of this Thread State.
+         */
+        protected int effectivePriority = priorityMinimum;
+        /**
+         * A list of the queues for which I am the current resource holder.
+         */
+        protected final LinkedList<PriorityQueue> resourcesIHave;
+        /**
+         * A list of the queues in which I am waiting.
+         */
+        protected final LinkedList<PriorityQueue> resourcesIWant;
+		//END ADDED
 
 	/** The thread with which this object is associated. */	   
 	protected KThread thread;

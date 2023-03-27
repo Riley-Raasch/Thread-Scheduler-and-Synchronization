@@ -194,13 +194,25 @@ public class KThread {
 
 	currentThread.status = statusFinished;
 
-    //adds thread to JoinQueue and wakes it up
-    KThread thread = joinQueue.nextThread();
-	if(thread != null){
-		thread.ready();
-    }
+    //TODO: Debug KThread class
+    // //adds thread to JoinQueue and wakes it up
+    // KThread thread = joinQueue.nextThread();
+	// if(thread != null){
+	// 	thread.ready();
+    // }
 	
-	sleep();
+	// sleep();
+
+		KThread newThread = currentThread.joinQueue.nextThread();
+		while(newThread != null){
+			newThread.ready();
+			newThread = currentThread.joinQueue.nextThread();
+		}
+
+		sleep();
+
+
+
     }
 
     /**
@@ -279,17 +291,26 @@ public class KThread {
      * thread.
      */
     public void join() {
+        //TODO: debug
+        boolean status = Machine.interrupt().disable();
+
 	Lib.debug(dbgThread, "Joining to thread: " + toString());
 
 	Lib.assertTrue(this != currentThread);
 
     //save a reference (local to B) to the thread calling B.join() (that is, the current thread)
-    boolean threadStatus = Machine.interrupt().disable();
-    if(status != statusFinished){
+    //boolean threadStatus = Machine.interrupt().disable();
+
+    //ADDED a this reference
+    if(this.status != statusFinished){
 
         //put the current thread to sleep (A should go to sleep if it calls B.join()). Eventually, 
         //A will have to be waken up by B (that is why we need to save a reference to the current thread)
         joinQueue.waitForAccess(currentThread);
+
+        //ADDED this
+        joinQueue.acquire(this);
+
         sleep();
     }
     else{
@@ -297,7 +318,8 @@ public class KThread {
     }
 
     //resume execution
-    Machine.interrupt().restore(threadStatus);	
+    //CHANGED to status
+    Machine.interrupt().restore(status);	
 
     }
 
@@ -468,5 +490,7 @@ public class KThread {
     private static KThread idleThread = null;
 
     // joinQueue is the queue of threads to be joined
-    private static ThreadQueue joinQueue = ThreadedKernel.scheduler.newThreadQueue(true);
+
+        //TODO: debug (remove static and add parent)
+    private ThreadQueue joinQueue = ThreadedKernel.scheduler.newThreadQueue(true);
 }
